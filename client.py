@@ -6,6 +6,7 @@ from random import randint
 import pyautogui
 from threading import Thread
 import sys
+import win32api as win
 from PyQt5.QtWidgets import QMainWindow, QApplication, QWidget, QLabel, QPushButton, QAction, QMessageBox, QLineEdit
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import QRect, Qt
@@ -21,18 +22,29 @@ class Desktop(QMainWindow):
 
     def ChangeImage(self):
         try:
-            # if len(self.ip.text()) != 0 and len(self.port.text()):
-            sock = socket()
-            sock.connect(("localhost", 9091))
-            while True:
-                img = ImageGrab.grab()
-                img_bytes = io.BytesIO()
-                img.save(img_bytes, format='PNG')
-                sock.send(img_bytes.getvalue())
-            sock.close()
+            if len(self.ip.text()) != 0 and len(self.port.text()):
+                sock = socket()
+                print(self.ip.text(), int(self.port.text()))
+                sock.connect((self.ip.text(), int(self.port.text()))) # 192.168.31.186 9091
+                screenSize = (win.GetSystemMetrics(0),win.GetSystemMetrics(1))
+                sock.send(str(screenSize).encode())
+                self.controling = Thread(target=self.MouseAndKeyboardControl, args=(sock,), daemon=True)
+                self.controling.start()
+                while True:
+                    img = ImageGrab.grab()
+                    img_bytes = io.BytesIO()
+                    img.save(img_bytes, format='PNG')
+                    sock.send(img_bytes.getvalue())
+                sock.close()
         except Exception as e:
             print(e)
             print("DISCONNECTED")
+            sock.close()
+
+    def MouseAndKeyboardControl(self, conn):
+        while True:
+            command = conn.recv(1024).decode()
+            print(command)
 
     def initUI(self):
         self.pixmap = QPixmap()
@@ -47,14 +59,14 @@ class Desktop(QMainWindow):
         self.btn.resize(390, 30)
         self.btn.setText("Start Demo")
         self.btn.clicked.connect(self.StartThread)
-        # self.ip = QLineEdit(self)
-        # self.ip.move(5, 5)
-        # self.ip.resize(390, 20)
-        # self.ip.setPlaceholderText("IP")
-        # self.port = QLineEdit(self)
-        # self.port.move(5, 30)
-        # self.port.resize(390, 20)
-        # self.port.setPlaceholderText("PORT")
+        self.ip = QLineEdit(self)
+        self.ip.move(5, 5)
+        self.ip.resize(390, 20)
+        self.ip.setPlaceholderText("IP")
+        self.port = QLineEdit(self)
+        self.port.move(5, 30)
+        self.port.resize(390, 20)
+        self.port.setPlaceholderText("PORT")
 
 
 if __name__ == '__main__':
