@@ -1,12 +1,13 @@
 import socket
 from os import getlogin
-from PIL import Image
+from PIL import Image, ImageQt, ImageChops
 import io
 import numpy as np
 from random import randint
 import pyautogui
 from threading import Thread
 import win32api as win
+import math
 # PyQt5
 import sys
 from PyQt5.QtWidgets import QMainWindow, QApplication, QWidget, QLabel, QPushButton, QAction, QMessageBox
@@ -49,8 +50,8 @@ class Dekstop(QMainWindow):
                         y = y-win_y
                         positionStr = 'X: ' + str(x).rjust(4) + ' Y: ' + str(y).rjust(4)
                         print(positionStr)
-                        # command = str([click, x*2, y*2])
-                        # conn.send(command.encode())
+                        command = str((x*2, y*2))
+                        conn.send(command.encode())
         except ConnectionResetError:
             QMessageBox.about(self, "ERROR", "[SERVER]: The remote host forcibly terminated the existing connection!")
             conn.close()
