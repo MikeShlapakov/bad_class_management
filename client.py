@@ -1,8 +1,9 @@
 from socket import *
-from PIL import ImageGrab
+from PIL import ImageGrab, Image, ImageChops
 import io
 import numpy as np
 from random import randint
+import time
 import pyautogui
 from threading import Thread
 import sys
@@ -28,13 +29,22 @@ class Desktop(QMainWindow):
                 sock.connect((self.ip.text(), int(self.port.text()))) # 192.168.31.186 9091
                 screenSize = (win.GetSystemMetrics(0),win.GetSystemMetrics(1))
                 sock.send(str(screenSize).encode())
+                time.sleep(0.1)
                 self.controling = Thread(target=self.MouseAndKeyboardControl, args=(sock,), daemon=True)
                 self.controling.start()
+                img = ImageGrab.grab()
+                prev_img = img
+                img_bytes = io.BytesIO()
+                img.save(img_bytes, format='PNG')
+                sock.send(img_bytes.getvalue())
                 while True:
                     img = ImageGrab.grab()
-                    img_bytes = io.BytesIO()
-                    img.save(img_bytes, format='PNG')
-                    sock.send(img_bytes.getvalue())
+                    diif = ImageChops.difference(prev_img, img)
+                    if diff.getbbox():
+                        img_bytes = io.BytesIO()
+                        img.save(img_bytes, format='PNG')
+                        sock.send(img_bytes.getvalue())
+                        prev_img = img
                 sock.close()
         except Exception as e:
             print(e)
@@ -44,7 +54,12 @@ class Desktop(QMainWindow):
     def MouseAndKeyboardControl(self, conn):
         while True:
             command = conn.recv(1024).decode()
-            print(command)
+            try:
+                pos = eval(command)
+            except TypeError:
+                pass
+            else:
+                pyautogui.moveTo(pos)
 
     def initUI(self):
         self.pixmap = QPixmap()
