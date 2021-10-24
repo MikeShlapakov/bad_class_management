@@ -5,6 +5,7 @@ import io
 import numpy as np
 from random import randint
 import pyautogui
+from pynput import mouse, keyboard
 from threading import Thread
 import time
 import win32api as win
@@ -15,12 +16,15 @@ from PyQt5.QtWidgets import QMainWindow, QApplication, QWidget, QLabel, QPushBut
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import QRect, Qt
 
-
 print("[SERVER]: STARTED")
 sock = socket.socket()
-sock.bind(('192.168.31.229', 9091))  # Your Server
+ADDR = '192.168.31.186'
+sock.bind((ADDR, 9091))
 sock.listen()
 conn, addr = sock.accept()
+
+scale_x, scale_y = 2, 2
+
 
 class Dekstop(QMainWindow):
     def __init__(self):
@@ -33,7 +37,8 @@ class Dekstop(QMainWindow):
             screenSize = conn.recv(1024)
             print(screenSize)
             screenSize = screenSize.decode()
-            self.setGeometry(QRect(pyautogui.size()[0] // 4, pyautogui.size()[1] // 4, eval(screenSize)[0] // 3, eval(screenSize)[1] // 3))
+            self.setGeometry(QRect(pyautogui.size()[0] // 4, pyautogui.size()[1] // 4, eval(screenSize)[0] // scale_x,
+                                   eval(screenSize)[1] // scale_y))
             self.setFixedSize(self.width(), self.height())
 
             self.controlling = Thread(target=self.Controlling, args=(conn,), daemon=True)
@@ -50,33 +55,69 @@ class Dekstop(QMainWindow):
 
     def Controlling(self, conn):
         new_conn = socket.socket()
-        new_conn.bind(('192.168.31.229', 9092))  # Your Server
+        new_conn.bind((ADDR, 9092))
         new_conn.listen()
         conn, addr = new_conn.accept()
-        while True:
-            click = win.GetKeyState(0x01)
-            if click < 0:
-                x, y = pyautogui.position()
-                win_x, win_y = self.frameGeometry().x()+(self.frameGeometry().width()-self.label.width()), self.frameGeometry().y()+(self.frameGeometry().height()-self.label.height())
-                win_width, win_height = self.label.width(), self.label.height()
-                if win_x <= x <= win_x + win_width and win_y <= y <= win_y + win_height:
-                    print(win_x, win_y, win_width, win_height)
-                    print(x,y)
-                    x = x - win_x
-                    y = y - win_y
-                    positionStr = 'X: ' + str(x).rjust(4) + ' Y: ' + str(y).rjust(4)
-                    print(positionStr)
-                    command = str((x * 3, y * 3))
-                    conn.send(command.encode())
-                    msg = conn.recv(256)
-                    print(msg)
+
+        def on_move(x, y):
+            win_x, win_y = self.frameGeometry().x() + (
+                        self.frameGeometry().width() - self.label.width()), self.frameGeometry().y() + (
+                                       self.frameGeometry().height() - self.label.height())
+            win_width, win_height = self.label.width(), self.label.height()
+            if win_x <= x <= win_x + win_width and win_y <= y <= win_y + win_height:
+                x = x - win_x
+                y = y - win_y
+                command = str(['MOVE', x * scale_x, y * scale_y])
+                conn.send(command.encode())
+                conn.recv(256)
+            # print('Pointer moved to {0}'.format((x, y)))
+
+        def on_click(x, y, button, pressed):
+            win_x, win_y = self.frameGeometry().x() + (
+                        self.frameGeometry().width() - self.label.width()), self.frameGeometry().y() + (
+                                       self.frameGeometry().height() - self.label.height())
+            win_width, win_height = self.label.width(), self.label.height()
+            if win_x <= x <= win_x + win_width and win_y <= y <= win_y + win_height:
+                command = str(['CLICK' if pressed else 'RELEASE', str(button)])
+                conn.send(command.encode())
+                print(command)
+                conn.recv(256)
+            # print('{0} at {1} {2}'.format('Pressed' if pressed else 'Released',(x, y), button))
+
+        def on_scroll(x, y, dx, dy):
+            win_x, win_y = self.frameGeometry().x() + (
+                        self.frameGeometry().width() - self.label.width()), self.frameGeometry().y() + (
+                                       self.frameGeometry().height() - self.label.height())
+            win_width, win_height = self.label.width(), self.label.height()
+            if win_x <= x <= win_x + win_width and win_y <= y <= win_y + win_height:
+                command = str(['SCROLL', 'DOWN' if dy < 0 else 'UP'])
+                conn.send(command.encode())
+                conn.recv(256)
+            # print('Scrolled {0} at {1}'.format('down' if dy < 0 else 'up',(x, y)))
+
+        listener = mouse.Listener(on_move=on_move, on_click=on_click)
+        listener.start()
+
+        def on_press(key):
+            ms = mouse.Controller()
+            x,y = ms.position
+            win_x, win_y = self.frameGeometry().x() + (
+                    self.frameGeometry().width() - self.label.width()), self.frameGeometry().y() + (
+                                   self.frameGeometry().height() - self.label.height())
+            win_width, win_height = self.label.width(), self.label.height()
+            if win_x <= x <= win_x + win_width and win_y <= y <= win_y + win_height:
+                command = str(['KEY', str(key)])
+                conn.send(command.encode())
+                conn.recv(256)
+
+        listener = keyboard.Listener(on_press=on_press)
+        listener.start()
 
     def initUI(self):
         self.pixmap = QPixmap()
         self.label = QLabel(self)
         self.label.resize(self.width(), self.height())
         self.setWindowTitle("[SERVER] Remote Desktop: " + str(randint(99999, 999999)))
-
         self.screenSharing = Thread(target=self.ScreenSharing, daemon=True)
         self.screenSharing.start()
 
