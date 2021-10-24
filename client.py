@@ -26,11 +26,11 @@ class Desktop(QMainWindow):
             if len(self.ip.text()) != 0 and len(self.port.text()):
                 sock = socket()
                 print(self.ip.text(), int(self.port.text()))
-                sock.connect((self.ip.text(), int(self.port.text()))) # 192.168.31.186 9091
+                sock.connect((self.ip.text(), int(self.port.text()))) # 192.168.31.229 9091
                 screenSize = (win.GetSystemMetrics(0),win.GetSystemMetrics(1))
                 sock.send(str(screenSize).encode())
                 time.sleep(0.1)
-                self.controling = Thread(target=self.MouseAndKeyboardControl, args=(sock,), daemon=True)
+                self.controling = Thread(target=self.MouseAndKeyboardController, args=(sock,), daemon=True)
                 self.controling.start()
                 img = ImageGrab.grab()
                 prev_img = img
@@ -39,7 +39,7 @@ class Desktop(QMainWindow):
                 sock.send(img_bytes.getvalue())
                 while True:
                     img = ImageGrab.grab()
-                    diif = ImageChops.difference(prev_img, img)
+                    diff = ImageChops.difference(prev_img, img)
                     if diff.getbbox():
                         img_bytes = io.BytesIO()
                         img.save(img_bytes, format='PNG')
@@ -51,15 +51,21 @@ class Desktop(QMainWindow):
             print("DISCONNECTED")
             sock.close()
 
-    def MouseAndKeyboardControl(self, conn):
+    def MouseAndKeyboardController(self, conn):
+        new_conn = socket()
+        new_conn.connect((self.ip.text(), 9092))
         while True:
-            command = conn.recv(1024).decode()
+            command = new_conn.recv(256).decode()
             try:
                 pos = eval(command)
             except TypeError:
                 pass
+            except SyntaxError:
+                pass
             else:
                 pyautogui.moveTo(pos)
+                new_conn.send(("got it").encode())
+
 
     def initUI(self):
         self.pixmap = QPixmap()
