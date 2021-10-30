@@ -16,7 +16,8 @@ from PyQt5.QtWidgets import QMainWindow, QApplication, QWidget, QLabel, QPushBut
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import QRect, Qt
 
-ADDR = '192.168.31.186'
+# ADDR = '192.168.31.186'
+ADDR = '172.16.1.123'
 class Desktop(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -31,17 +32,18 @@ class Desktop(QMainWindow):
             sock = socket()
             #     print(self.ip.text(), int(self.port.text()))
             #     sock.connect((self.ip.text(), int(self.port.text()))) # 192.168.31.229 9091
-            sock.connect((ADDR, 9091))
-            screenSize = (win.GetSystemMetrics(0),win.GetSystemMetrics(1))
+            sock.connect((ADDR, 12121))
+            screenSize = [win.GetSystemMetrics(0),win.GetSystemMetrics(1)]
             sock.send(str(screenSize).encode())
             time.sleep(0.1)
-            self.controling = Thread(target=self.MouseAndKeyboardController, args=(sock,), daemon=True)
+            self.controling = Thread(target=self.MouseAndKeyboardController, daemon=True)
             self.controling.start()
             img = ImageGrab.grab()
             prev_img = img
             img_bytes = io.BytesIO()
             img.save(img_bytes, format='PNG')
             sock.send(img_bytes.getvalue())
+            sock.recv(256)
             while True:
                 img = ImageGrab.grab()
                 diff = ImageChops.difference(prev_img, img)
@@ -49,6 +51,7 @@ class Desktop(QMainWindow):
                     img_bytes = io.BytesIO()
                     img.save(img_bytes, format='PNG')
                     sock.send(img_bytes.getvalue())
+                    sock.recv(256)
                     prev_img = img
             sock.close()
         except Exception as e:
@@ -56,11 +59,51 @@ class Desktop(QMainWindow):
             print("DISCONNECTED")
             sock.close()
 
-    def MouseAndKeyboardController(self, conn):
+    def MouseAndKeyboardController(self):
         new_conn = socket()
-        new_conn.connect((ADDR, 9092))
+        new_conn.connect((ADDR, 13131))
         ms = mouse.Controller()
         kb = keyboard.Controller()
+
+        def on_move(x,y):
+            ms.position = (x,y)
+            new_conn.send(("got it").encode())
+
+        def on_click(button):
+            ms.press(Button.left if button.find('left') else Button.right)
+            new_conn.send(("got it").encode())
+            msg = new_conn.recv(256).decode()
+            try:
+                command = eval(msg)
+            except Exception as e:
+                print(e)
+            else:
+                command = eval(msg)
+                while command[0] != "RELEASE":
+                    func = commands[command[0]]
+                    func(command)
+                    msg = new_conn.recv(256).decode()
+                    try:
+                        command = eval(msg)
+                    except Exception as e:
+                        print(e)
+                new_conn.send(("got it").encode())
+            ms.release(Button.left if button.find('left') else Button.right)
+
+        def on_scroll(scroll):
+            ms.scroll(0, scroll)
+            new_conn.send(("got it").encode())
+
+        def on_key(key):
+            kb.press(eval(key))
+            kb.release(eval(key))
+            new_conn.send(("got it").encode())
+
+        commands = {"MOVE": lambda arr: on_move(arr[1], arr[2]),
+                "CLICK": lambda arr: on_click(arr[1]),
+                "SCROLL": lambda arr: on_scroll(arr[1]),
+                "KEY": lambda arr: on_key(arr[1])}
+
         while True:
             msg = new_conn.recv(256).decode()
             try:
@@ -69,46 +112,21 @@ class Desktop(QMainWindow):
                 print(e)
                 pass
             else:
-                if command[0] == "CLICK":
-                    button = command[1]
-                    ms.press(Button.left if button.find('left') else Button.right)
-                    new_conn.send(("got it").encode())
-                    msg = new_conn.recv(256).decode()
-                    try:
-                        command = eval(msg)
-                    except Exception as e:
-                        print(e)
-                    else:
-                        command = eval(msg)
-                        while command[0] != "RELEASE":
-                            if command[0] == 'MOVE':
-                                ms.position = (command[1],command[2])
-                            new_conn.send(("got it").encode())
-                            msg = new_conn.recv(256).decode()
-                            try:
-                                command = eval(msg)
-                            except Exception as e:
-                                print(e)
-                        ms.release(Button.left if button.find('left') else Button.right)
-                elif command[0] == 'MOVE':
-                    ms.position = (command[1],command[2])
-                elif command[0] == 'KEY':
-                    kb.press(eval(command[1]))
-                    kb.release(eval(command[1]))
-                new_conn.send(("got it").encode())
+                func = commands[command[0]]
+                func(command)
 
 
     def initUI(self):
         self.pixmap = QPixmap()
         self.label = QLabel(self)
         self.label.resize(self.width(), self.height())
-        self.setGeometry(QRect(pyautogui.size()[0] // 4, pyautogui.size()[1] // 4, 400, 90))
-        self.setFixedSize(self.width(), self.height())
-        self.setWindowTitle("[CLIENT] Remote Desktop: " + str(randint(99999, 999999)))
+        self.setGeometry(QRect(win.GetSystemMetrics(0)// 4,win.GetSystemMetrics(1)  // 4, 200, 100))
+        # self.setFixedSize(self.width(), self.height())
+        self.setWindowTitle("[CLIENT] Remote Desktop")
         self.start = Thread(target=self.ChangeImage, daemon=True)
         self.btn = QPushButton(self)
         self.btn.move(5, 55)
-        self.btn.resize(390, 30)
+        # self.btn.resize(390, 30)
         self.btn.setText("Start Demo")
         self.btn.clicked.connect(self.StartThread)
         # self.ip = QLineEdit(self)
